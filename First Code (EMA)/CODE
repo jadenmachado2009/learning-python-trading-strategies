@@ -1,0 +1,89 @@
+# ==============================================================================
+# imports
+# ==============================================================================
+import yfinance as yf
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+# ==============================================================================
+# config
+# ==============================================================================
+
+TICKER         = 'NQ=F'
+PERIOD         = '60d'
+INTERVAL       = '5m'
+CAPITAL        = 100000
+SLOW_EMA       = 21
+FAST_EMA       = 9
+
+# ==============================================================================
+# data pull
+# ==============================================================================
+
+df = yf.download(TICKER, period = PERIOD, interval = INTERVAL, auto_adjust=True)
+df.dropna(inplace=True)
+df.columns = df.columns.get_level_values(0)
+
+# ==============================================================================
+# indicators
+# ==============================================================================
+
+df['EMA_slow'] = df['Close'].ewm(span = SLOW_EMA, adjust=False).mean()
+df['EMA_fast'] = df['Close'].ewm(span = FAST_EMA, adjust=False).mean()
+
+# ==============================================================================
+# signals
+# ==============================================================================
+# Signal: condition that returns True/False, convert to 1/0
+df['Signal']   = (df['EMA_slow'] < df['EMA_fast']).astype(int)
+
+# Position: where does signal change?
+df['Position'] = df['Signal'].diff()
+
+# ==============================================================================
+# returns & equity curve
+# ==============================================================================
+
+df['Market_Return']   = df['Close'].pct_change()
+
+df['Strategy_Return'] = df['Market_Return'] * df['Signal'].shift(1)
+
+df['Equity']          = (1 + df['Strategy_Return']).cumprod() * CAPITAL
+
+df.dropna(inplace=True)
+
+# ==============================================================================
+# metrics
+# ==============================================================================
+
+entries           = df[df['Position'] ==  1]
+exits             = df[df['Position'] == -1]
+
+total_return      = (df['Equity'].iloc[-1] / CAPITAL - 1) * 100
+bars_per_year     = 252 * 78
+annualised_return = df['Strategy_Return'].mean() * bars_per_year * 100
+
+# ==============================================================================
+# print -- metrics
+# ==============================================================================
+
+print(f"Entries : {len(entries)}")
+print(f"Exits : {len(exits)}")
+print(f"Total Return : {total_return:.2f}%")
+print(f"Annualised Return : {annualised_return:.2f}%")
+
+# ==============================================================================
+# equity curve
+# ==============================================================================
+
+fig, ax1 = plt.subplots(1, 1, figsize=(14, 5))
+
+ax1.plot(df.index, df["Equity"], color="royalblue", linewidth=1.2, label="Strategy")
+ax1.axhline(CAPITAL, color="gray", linestyle="--", linewidth=0.8)
+ax1.set_ylabel("Portfolio Value ($)")
+ax1.set_title("EMA 9/21 Crossover — NQ Futures 5min")
+ax1.legend()
+
+plt.tight_layout()
+plt.show()
