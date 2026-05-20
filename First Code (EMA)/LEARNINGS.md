@@ -2,9 +2,9 @@
 
 > Self-directed study in quantitative finance and systematic strategy development.
 
-------------------
+---
 
-## Entry 001 — Vectorised EMA Crossover Backtest
+## Vectorised EMA Crossover Backtest
 
 **Date:** 2026-05-20
 
@@ -12,7 +12,7 @@
 
 **Asset:** NQ=F (Nasdaq-100 Futures)
 
-**Timeframe:** 5miin
+**Timeframe:** 5-minute bars
 
 **Lookback:** 60 days
 
@@ -30,30 +30,22 @@
 
 ### Key Concepts Learned
 
-**`ewm(span, adjust=False)`**
-Smaller span reacts faster but amplifies noise; larger span is smoother but lags price. `adjust=False` selects the standard recursive EMA formula over the correction-weighted initialisation.
+**General strategy coding structure**
+- Every strategy follows the same pipeline: `imports` → `config` → `data` → `indicators` → `signals` → `returns` → `metrics` → `plot`
+- The format each basic line of code follows
 
-**Signal → Position via `.diff()`**
-`.diff()` on a binary signal series produces +1 at entries and −1 at exits — avoids row-by-row comparisons and stays fully vectorised.
+**`ewm(span, adjust=False)` — exponential moving average**
+- Smaller span reacts faster to price but generates more noise. Larger span is smoother but lags
+- `adjust=False` uses the standard EMA formula
 
-**Lookahead Bias — `.shift(1)`**
+- Learnt what key parameters do within each function, such as `span` and `adjust` in `ewm()`, `periods` in `shift()` and `diff()`, and how `cumprod()` compounds returns into an equity curve
+  
+**Annualised return approximation**
 ```python
-df['Strategy_Return'] = df['Market_Return'] * df['Signal'].shift(1)
-```
-The shift enforces that signals are acted on the *following* bar. Without it, today's signal trades today's return — a form of data snooping that inflates backtest performance.
-
-**Equity Curve via Compounding**
-```python
-df['Equity'] = (1 + df['Strategy_Return']).cumprod() * CAPITAL
-```
-Simple returns compounded correctly. Log returns add no meaningful accuracy at a 60-day horizon.
-
-**Annualised Return Approximation**
-```python
-bars_per_year = 252 * 78  # 252 sessions × 78 five-minute bars
+bars_per_year = 252 * 78  # 252 sessions × 78 five-minute bars in a day
 annualised_return = df['Strategy_Return'].mean() * bars_per_year
 ```
-Arithmetic scaling — reasonable at this stage. Geometric annualisation is more rigorous but immaterial at this sample size.
+- Mean bar return scaled to the number of bars in a trading year — arithmetic approximation
 
 ---
 
@@ -69,28 +61,24 @@ Arithmetic scaling — reasonable at this stage. Geometric annualisation is more
 
 ---
 
-### Critical Reflection
-
-EMA crossovers are among the most studied and most overfitted strategies in retail trading. On 5-minute NQ data, the system performs well in directional sessions and deteriorates sharply in choppy, low-volatility regimes. The annualised return figure carries no statistical weight at this sample size.
-
+### Notes
 **The goal of this script was not to find an edge.** It was to build and fully understand the core backtest pipeline: data → indicators → signals → returns → equity curve. That objective was met.
 
 ---
 
 ### Open Questions
 
-- How do I correctly deduct costs at the trade level rather than the bar level?
-- How do I reconstruct trade-by-trade P&L from a vectorised signal series?
-- What is the difference between vectorised and event-driven backtesting frameworks?
-- How does `yfinance` data quality compare to exchange-grade tick data?
-- What sample size is needed for statistically significant backtest conclusions?
+- [ ] How do I correctly deduct costs at the trade level rather than the bar level?
+- [ ] How does `yfinance` data quality compare to exchange-grade tick data? Is it possible to use institutional level data for free? 
+- [ ] What sample size is needed for statistically significant backtest conclusions?
+- [ ] How to build more complicated entry models?
 
 ---
 
 ### Next Build Targets
 
-- Trade-level metrics: win rate, avg win, avg loss, profit factor
-- Risk metrics: Sharpe ratio, max drawdown, Calmar ratio
-- Proper cost model: deduct on entry and exit bars only
-- Regime filter: ATR or volume condition to suppress signals in choppy markets
-- Systematic parameter sweep across EMA pairs: 5/13 · 9/21 · 20/50
+- [ ] Trade-level metrics: win rate, avg win, avg loss, profit factor
+- [ ] Risk metrics: Sharpe ratio, max drawdown, sortino ratio
+- [ ] Proper cost model: deduct on entry and exit bars only
+- [ ] Regime filter: ATR or volume condition
+- [ ] RSI based entry models
