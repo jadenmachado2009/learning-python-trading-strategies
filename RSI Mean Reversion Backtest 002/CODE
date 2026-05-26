@@ -1,0 +1,103 @@
+# ==============================================================================
+# imports
+# ==============================================================================
+import yfinance as yf
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+# ==============================================================================
+# config
+# ==============================================================================
+
+TICKER   = 'NQ=F'
+PERIOD   = '60d'
+INTERVAL = '5m'
+CAPITAL  = 100000
+RSI_LEN  = 14
+RSI_OB   = 70
+RSI_OS   = 30
+
+# ==============================================================================
+# data pull
+# ==============================================================================
+
+df = yf.download(TICKER, period = PERIOD, interval = INTERVAL, auto_adjust=True)
+df.dropna(inplace=True)
+df.columns = df.columns.get_level_values(0)
+
+# ==============================================================================
+# indicators
+# ==============================================================================
+
+delta = df['Close'].diff()
+gain  = delta.where(delta > 0, 0)
+loss  = -delta.where(delta < 0, 0)
+
+avg_gain = gain.rolling(RSI_LEN).mean()
+avg_loss = loss.rolling(RSI_LEN).mean()
+rs       = avg_gain/avg_loss
+
+df['RSI'] = 100 - (100/(1 + rs))
+
+# ==============================================================================
+# signals
+# ==============================================================================
+
+df['raw_signal'] = np.nan
+df.loc[df['RSI'] < RSI_OS, 'raw_signal'] = 1
+df.loc[df['RSI'] > RSI_OB, 'raw_signal'] = 0
+
+df['Signal'] = df['raw_signal'].ffill().fillna(0)
+
+# ==============================================================================
+# returns & equity curve
+# ==============================================================================
+
+df['Position'] = df['Signal'].diff()
+
+df['Market_Return']   = df['Close'].pct_change()
+
+df['Strategy_Return'] = df['Market_Return'] * df['Signal'].shift(1)
+
+df['Equity']          = (1 + df['Strategy_Return']).cumprod() * CAPITAL
+
+df.dropna(inplace=True)
+
+# ==============================================================================
+# metrics
+# ==============================================================================
+
+entries           = df[df['Position'] ==  1]
+exits             = df[df['Position'] == -1]
+
+total_return      = (df['Equity'].iloc[-1] / CAPITAL - 1) * 100
+bars_per_year     = 252 * 78
+annualised_return = df['Strategy_Return'].mean() * bars_per_year * 100
+
+# ==============================================================================
+# print -- metrics
+# ==============================================================================
+
+days_traded = (df.index[-1] - df.index[0]).days
+ann_return  = ((1 + total_return/100) ** (365/days_traded) - 1) * 100
+
+print(f"Entries : {len(entries)}")
+print(f"Exits : {len(exits)}")
+print(f"Total Return : {total_return:.2f}%")
+print(f"Annualised Return : {ann_return:.2f}%")
+
+# ==============================================================================
+# equity curve
+# ==============================================================================
+
+fig, ax1 = plt.subplots(1, 1, figsize=(14, 5))
+
+ax1.plot(df.index, df["Equity"], color="royalblue", linewidth=1.2, label="Strategy")
+ax1.axhline(CAPITAL, color="gray", linestyle="--", linewidth=0.8)
+ax1.set_ylabel("Portfolio Value ($)")
+ax1.set_title("RSI Mean Reversion — NQ Futures 5min")
+ax1.legend()
+
+plt.tight_layout()
+plt.show()
